@@ -1,4 +1,4 @@
-name: Build Unisoc Kernel
+name: Build Unisoc GKI Kernel (GCC)
 
 on:
   push:
@@ -12,53 +12,43 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup environment dependencies
+      - name: Setup environment and GCC toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache flex libssl-dev libelf-dev python3 git wget
+          sudo apt-get install -y bc bison build-essential ccache flex libssl-dev libelf-dev python3 git wget \
+                                  gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Setup Toolchain (AOSP Clang / GCC)
-        run: |
-          # Клонируем стандартный AOSP Clang для компиляции андроид-ядер
-          mkdir -p toolchain/clang
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 toolchain/clang || true
-
-      - name: Configure Kernel
+      - name: Configure Kernel with gki_unikal_defconfig
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
           
-          # Если ты закинул готовый defconfig, например, в arch/arm64/configs/unisoc_defconfig:
+          # Применяем твой кастомный дефконфиг
           make O=out gki_unikal_defconfig
-          
-          # Либо если дефолтный конфиг лежит в корне как .config, то копируем его:
-          # cp your_custom_config out/.config
-          # make O=out olddefconfig
 
-      - name: Build Kernel Image
+      - name: Build Kernel Image with GCC
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
           
-          # Прописываем путь к скачанному clang (путь поправь под актуальную структуру, если нужно)
-          export PATH="${{ github.workspace }}/toolchain/clang/clang-r416183b/bin:$PATH"
-          
-          # Твоя легендарная команда сборки со всеми флагами
+          # Запускаем сборку с нашими флагами под GCC
           make -j$(nproc) O=out Image KCFLAGS="-Wno-error=return-type -Wno-format -Wno-error"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-image-unisoc
+          name: kernel-image-gki-unikal-gcc
           path: out/arch/arm64/boot/Image
 
       - name: Create GitHub Release & Upload Binary
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
-          tag_name: kernel-build-${{ github.run_number }}
-          name: "Unisoc Custom Kernel # ${{ github.run_number }}"
-          body: "Автоматическая сборка кастомного ядра для Unisoc с GitHub Actions. Core 2 Duo наконец-то может отдохнуть! 🥳"
+          tag_name: kernel-gcc-build-${{ github.run_number }}
+          name: "Unisoc GKI GCC Custom Kernel # ${{ github.run_number }}"
+          body: "Сборка через стандартный кросс-компилятор GCC для ARM64."
           files: out/arch/arm64/boot/Image
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
